@@ -1,0 +1,1255 @@
+# -*- coding: UTF-8 -*- 
+#                                                               /\
+#                                                           ___/  \___
+# _______________________  >> dEMONIC pRODUCTIONZ //       /___ o0 ___\__________
+# \_______         _____/_______________        _____________/__/\__\   /_______/
+#   /    /    /   ___/__\______        /________\________    /____\    /     /jp
+#  /    /    /   /            /  /    /   _________/   /    /     /   '     /
+# /_________/___________/    /  /    /    /     /     /    /_____/_________/
+#                      /____/__/_____    /     ______/____/
+#                                   \_________/
+# op-lastcall (c) opicron 2026 :: CFG
+
+from datetime import datetime
+
+import mystic_bbs as bbs
+import os, struct, json, re, ConfigParser, sys, time, math
+
+# Global lists
+Users = []
+Callers = []
+
+mysticCallers = []
+mysticHistory = []
+historyDates = []
+
+# Excluded handle
+EXCLUDED_HANDLE = "opiflex"
+
+historyDateFirst = None
+historyDateSecond = None
+
+config = None
+scriptdir = None
+datapath = None
+
+KEY_ESCAPE      = chr(27)
+KEY_SPACE       = chr(32)
+KEY_ENTER       = chr(13)
+KEY_UP          = chr(72)       
+KEY_DOWN        = chr(80)
+KEY_PGUP        = chr(73)
+KEY_PGDN        = chr(81)
+KEY_END         = chr(79)
+KEY_HOME        = chr(71)
+KEY_LEFT        = chr(75)
+KEY_RIGHT       = chr(77)
+
+#------------------------------------------------------------------------------
+def min_mystic_version(minor,alpha):
+    """ 
+    Check if minimal version requirement is met. When minor is larger than given
+    argument return true, else when minor is equal alpha is equal or higher the 
+    result is true. Minor less than argument is False.
+    """
+    version = bbs.mci2str('VR')
+
+    for match in re.findall(r'\.([0-9]{2})', version):
+        mystic_minor = int(match)
+        #bbs.writeln(str(mystic_minor))
+        if mystic_minor > int(minor):
+            return True
+        elif mystic_minor == int(minor):
+            for match in re.findall(r'A([0-9]{2})', version):
+                mystic_alpha = int(match)
+                #bbs.writeln(str(mystic_alpha))
+                if mystic_alpha >= int(alpha):
+                    return True
+
+    return False
+
+def find_display_custom( filepath ):
+    """ load ansi file with backwards compatibility for mystic a47 or lower """    
+    try:
+        bbs.find_display('test')
+    except AttributeError as e:
+        
+        x, y = bbs.termsize();
+
+        base = filepath[:-4] 
+
+        if os.path.exists(base + '.c' + str(x) + 'x' + str(y) + '.ans'):
+            return base + '.c' + str(x) + 'x' + str(y) + '.ans'
+        elif os.path.exists(base + '.c' + str(x) + '.ans'):
+            return base + '.c' + str(x) + '.ans'
+        else:
+            return filepath
+
+    else:        
+        return bbs.find_display( filepath[:-4] )            
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+def color(s,colors):    
+    colorized = ""
+    
+    for index, char in enumerate(s):
+        if exist_at_index(colors, index):
+            colorized += '|'+colors[index]
+            #bbs.rwrite(colors[index])
+        colorized += char
+
+    return colorized
+
+def mci_extract_colors(s):
+    defaultcolor = config.get('mci','defaultcolor')
+    s = s.replace(' ',defaultcolor) + defaultcolor
+
+    return re.findall(r'\|([0-9]{2})', s)
+
+def mci_adjust_y(s,i=0):
+  for match in re.findall(r'\|\[Y([0-9]{2})', s):
+    pos = int( match )
+    pos += i
+    s = s.replace('|[Y'+match, '|[Y'+str(pos).zfill(2)) 
+
+  return s
+
+def mci_adjust_x(s,i=0):
+  for match in re.findall(r'\|\[X([0-9]{2})', s):
+    pos = int( match )
+    pos += i
+    s = s.replace('|[X'+match, '|[X'+str(pos).zfill(2)) 
+
+  return s
+
+def mci_extract_y(s):
+  for match in re.findall(r'\|\[Y([0-9]{2})', s):
+    pos = int( match )
+    return pos
+
+  return -1
+
+def mci_extract_x(s):
+  for match in re.findall(r'\|\[X([0-9]{2,3})', s):
+    pos = int( match )
+    #write(str(pos))
+    return pos
+
+  for match in re.findall(r'\|\$X([0-9]{2,3})', s):
+    pos = int( match )
+    #write(str(pos)+'|PN')
+    return pos
+
+  return -1
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+def loadjson2list(filename):
+    """ load json to list, NOT USED AS IT WOULD BE TOO INTENSIVE FOR HUGE FILES """
+    try:
+        if os.path.exists(filename):
+            with open(filename) as json_file:
+                jlist = json.load(json_file)
+                return jlist
+        else:
+            return False
+    except:
+        return False
+
+def savelist2json(lista,filename):
+    """ save list to json one by one """
+    try:
+        with open(filename, 'w+') as outfile:
+            for entry in lista:
+                #DUMP PER LIST!, below is dumping the WHOLE object
+                #json.dump(entry, outfile,indent=2)
+                json.dump(entry, outfile) #one line per entry
+                outfile.write("\n")
+        return True
+    except:
+        return False
+
+def appendlist2json(entry, filename):
+    """ append one json object """
+    try:
+        with open(filename, 'a') as outfile:
+            json.dump(entry, outfile) #one line per entry
+            outfile.write("\n")
+        return True
+    except:
+        return False
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+def readable_size(byte_size):
+    # Define units in increasing order
+    units = ['KB', 'MB', 'GB', 'TB']
+    size = float(byte_size)  # Ensure the input is in float for accurate division
+    
+    color = config.get('mci','sizecolor')
+    unitcolor = config.get('mci','sizeunitcolor')
+
+    for unit in units:
+        if size < 1024:
+            return "{}{}".format(color+str(int(math.ceil(size))), unitcolor+unit)
+        size /= 1024  # Divide by 1024 to move to the next unit
+
+    # If size exceeds all units defined
+    return "{}{}".format(color+str(int(math.ceil(size))), unitcolor+units[-1])
+
+def exist_at_index(lst, index):
+    """ Check if value exists at a certain index """    
+    try:
+        lst[index]  # Try to access the value at the index
+        return True
+    except IndexError:
+        return False
+
+def time2sec(d):
+    """ Convert time to "hours:minutes" format """
+    if d < 0:
+        return '00:00'
+    m = d / 60
+    s = d % 60
+    if m > 60:
+        return "{:02}hr".format(m / 60)
+    else:
+        return "{:02}:{:02}".format(m, s)
+
+def unpackdt(t, format):
+    year = 1980 + (t >> 25)
+    month = (t & 0b00000001111000000000000000000000) >> 21
+    day = (t & 0b00000000000111110000000000000000) >> 16
+    hour = (t & 0b00000000000000001111100000000000) >> 11
+    minute = (t & 0b00000000000000000000011111100000) >> 5
+    second = (t & 0b00000000000000000000000000011111) * 2
+
+    custom_datetime = datetime(year, month, day, hour, minute, second)
+    return custom_datetime.strftime(format) 
+    #return datetime(year, month, day, hour, minute, second)
+
+def byte2str(v):
+    s=''.join(str(v))
+    return s[2:-1]
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+def get_file_endpos(file):
+    """Move the cursor to the end of the file and return its position."""
+    file.seek(0, 2)
+    return file.tell()
+
+def read_previous_line(file, filepos):
+    """
+    Read the previous line in the file by moving the cursor backward.
+    Returns the line (in correct order) and the new position.
+    """
+    buffer = bytearray()
+    while filepos >= 0:
+        file.seek(filepos)
+        char = file.read(1)
+
+        if char == b'\n' and buffer:
+            # Reverse and decode the buffer to get the line correctly
+            line = buffer[::-1].decode('utf-8')
+            return line, filepos - 1
+        else:
+            buffer.extend(char)
+        
+        filepos -= 1
+
+    # Handle the first line (if no newline was hit and buffer has content)
+    if buffer:
+        line = buffer[::-1].decode('utf-8')
+        return line, -1  # Return -1 to indicate start of file
+
+    return None, -1  # Return None if there are no more lines
+#------------------------------------------------------------------------------
+
+
+#------------------------------------------------------------------------------
+class MyConfigParser(ConfigParser.RawConfigParser):
+    """ custom parse to make sure qoutes are trimmed """
+    def get(self, section, option):
+        val = ConfigParser.RawConfigParser.get(self, section, option)
+        if isinstance(val, (int, float)):
+            return val
+        return val.strip('"') #.strip("'")
+
+def load_config():
+    """ load config with backward compatibility to mystic a47 and lower """
+
+    global config
+    global scriptdir
+    global datapath
+
+    config = MyConfigParser() #config2 = ConfigParser.SafeConfigParser()
+    scriptdir = bbs.getcfg()['script']+'op-lastcall'+os.sep    
+    datapath = bbs.getcfg()['data']
+
+    sys.path.append(scriptdir)                      
+
+    # set default configurations
+    defaultcfg = scriptdir+'default.ini'
+    customcfg = scriptdir+'custom.ini'
+    defaultcfg_wide = scriptdir+'default.ini'
+    customcfg_wide = scriptdir+'custom.ini'
+
+    config.read(defaultcfg)
+    config.read(customcfg)
+
+    # test mystic 1.12a48 configuration capability
+    x, y = bbs.termsize()
+
+    try:
+        bbs.find_config('test','ini')
+    except AttributeError as e:
+        if os.path.exists(scriptdir+'default.c'+str(x)+'x'+str(y)+'.ini'):
+            defaultcfg_wide = scriptdir+'default.c'+str(x)+'x'+str(y)+'.ini'
+        elif os.path.exists(scriptdir+'default.c'+str(x)+'.ini'):
+            defaultcfg_wide = scriptdir+'default.c'+str(x)+'.ini'
+
+        if os.path.exists(scriptdir+'custom.c'+str(x)+'x'+str(y)+'.ini'):
+            customcfg_wide = scriptdir+'custom.c'+str(x)+'x'+str(y)+'.ini'
+        elif os.path.exists(scriptdir+'custom.c'+str(x)+'.ini'):
+            customcfg_wide = scriptdir+'custom.c'+str(x)+'.ini'    
+        pass
+    else:        
+        defaultcfg_wide = bbs.find_config(scriptdir+'default','ini')            
+        customcfg_wide = bbs.find_config(scriptdir+'custom','.ini')            
+
+    #only load when different to original configuration
+    if defaultcfg_wide != None and defaultcfg != defaultcfg_wide:
+        config.read(defaultcfg_wide)
+
+    #only load when different to original configuration    
+    if customcfg_wide != None and customcfg != customcfg_wide:
+        config.read(customcfg_wide)
+#------------------------------------------------------------------------------
+
+
+def get_user_info(handle):
+    """ Get user record by handle and store handle on the same index as found by bbs.getuser """
+    global Users
+
+    count = 1 # dont get user 0 which is logged in user
+
+    while not bbs.shutdown():
+
+        if not exist_at_index(Users, count):
+            # get user and cache
+            user = bbs.getuser(count)
+            Users.insert(count, user)
+        else:
+            #use cached user
+            user = Users[count]
+
+        if user is None:
+            break
+
+        #lowercase indexes when using bbs.getuser!
+        if user['handle'] == handle:
+            return user
+        
+        count += 1
+
+    return None
+
+
+def get_last_callers():
+    """ 
+    Get mystic lastcallers from callers.dat 
+    """
+    
+    global mysticCallers
+    global mysticHistory
+
+    # used to determine if callers.dat last entry should be indexed
+    currentuser = bbs.getuser(0)['handle']
+    callersfile = datapath+"callers.dat"
+
+    if not os.path.exists(callersfile) or os.path.getsize(callersfile) == 0:
+        return False
+
+    f = open(callersfile,"rb")
+
+    #filestruct = '<L?b15sb50sBIb30sb25sb30scb35sb30sb60sb60sb60sb60sb60sb60sb60sb60sb60sb60s53c'
+    filestruct = (
+        '<L'    # DateTime (signed LongInt)
+        '?'     # NewUser (Boolean)
+        'b15s'  # PeerIP (String[15])
+        'b50s'  # PeerHost (String[50])
+        'B'     # Node (Byte, unsigned)
+        'i'     # CallNum (signed LongInt)
+        'b30s'  # Handle (String[30])
+        'b25s'  # City (String[25])
+        'b30s'  # Address (String[30])
+        'c'     # Gender (Char)
+        'b35s'  # EmailAddr (String[35])
+        'b30s'  # UserInfo (String[30])
+        'b60sb60sb60sb60sb60sb60sb60sb60sb60sb60s'  # OptionData (Array[1..10] of String[60])
+        'B'     # Source (Byte, unsigned)
+        'I'     # UserCalls (Cardinal, unsigned)
+        'L'     # UserIndex (signed LongInt)
+        'L'     # SecondsOn (signed LongInt)
+        'H'     # UserDLs (Word, unsigned)
+        'H'     # UserULs (Word, unsigned)
+        'L'     # UserDLK (signed LongInt)
+        'L'     # UserULK (signed LongInt)
+        'H'     # UserPosts (Word, unsigned)
+        'H'     # UserEmail (Word, unsigned)
+        'H'     # UserDoors (Word, unsigned)
+        'I'     # UserAF1 (AccessFlagType, 4 bytes)
+        'I'     # UserAF2 (AccessFlagType, 4 bytes)
+        '14c'   # Reserved (Array[1..14] of Byte)
+    )
+
+    size = struct.calcsize(filestruct)
+        
+    while not bbs.shutdown():
+
+        line = f.read(size)
+        if len(line) < size:
+            break
+        
+        data = struct.unpack(filestruct,line)     
+        handle = str(data[9][0:data[8]]).strip('\x00') #username
+        
+        user = get_user_info(handle)
+        if user != None:
+
+            # Assign each value from unpacked_data to the corresponding field
+            caller = {
+                'Date':         data[0],
+                'NewUser':      data[1],
+                'PeerIP':       str(data[3][0:data[2]]).strip('\x00'),
+                'PeerHost':     str(data[5][0:data[4]]).strip('\x00'),
+                'Node':         data[6],
+                'CallNum':      data[7],
+                'Handle':       str(data[9][0:data[8]]).strip('\x00'),
+                'City':         str(data[11][0:data[10]]).strip('\x00'),
+                'Address':      str(data[13][0:data[12]]).strip('\x00'),
+                'Gender':       str(data[14]).strip('\x00'),
+                'Email':        str(data[16][0:data[15]]).strip('\x00'),
+                'UserInfo':     str(data[18][0:data[17]]).strip('\x00'),
+                'Options': {
+                    0: str(data[20][0:data[19]]).strip('\x00'),
+                    1: str(data[22][0:data[21]]).strip('\x00'),
+                    2: str(data[24][0:data[23]]).strip('\x00'),
+                    3: str(data[26][0:data[25]]).strip('\x00'),
+                    4: str(data[28][0:data[27]]).strip('\x00'),
+                    5: str(data[30][0:data[29]]).strip('\x00'),
+                    6: str(data[32][0:data[31]]).strip('\x00'),
+                    7: str(data[34][0:data[33]]).strip('\x00'),
+                    8: str(data[36][0:data[35]]).strip('\x00'),
+                    9: str(data[38][0:data[37]]).strip('\x00'),           
+                },
+                'Source':       -1,
+                'Calls':        -1,
+                'Index':        -1,
+                'SecondsOn':    -1,
+                'DLs':          -1,
+                'ULs':          -1,
+                'DLk':          -1,
+                'ULk':          -1,
+                'Posts':        -1, 
+                'Emails':       -1,
+                'Doors':        -1,
+                'AF1':          -1,
+                'AF2':          -1,
+                #'Reserved':     data[39:52]
+            }
+
+            # Replace '\x00' characters in each string within the 'Options' list
+            # caller['Options'] = [item.replace('\x00', '') if isinstance(item, str) else item for item in caller['Options']]
+
+            # IF MYSTIC > 48
+            if min_mystic_version(12,48):
+
+                #if data[Se] > data[0]: #also check for mystic version? NO, because old callers.dat might be present
+
+                caller.update({
+                    'Source':       data[39],
+                    'Calls':        data[40],
+                    'Index':        data[41],
+                    'SecondsOn':    data[42],
+                    'DLs':          data[43],
+                    'ULs':          data[44],
+                    'DLk':          data[45],
+                    'ULk':          data[46],
+                    'Posts':        data[47],
+                    'Emails':       data[48],
+                    'Doors':        data[49],
+                    'AF1':          data[50],
+                    'AF2':          data[51],
+                    #'Reserved':     data[52]
+                })
+
+            #bbs.writeln(str(caller)) 
+
+            # add callers.dat entry if not last entry
+            # or if last entry and current caller is different than last caller
+            # this makes sure that saving the entries from caller.dat have the latest written mystic info
+            #if f.tell() != os.path.getsize(callersfile) or (f.tell() == os.path.getsize(callersfile) and currentuser != caller['Handle']):
+
+            mysticCallers.append( caller )
+            #else:
+                #bbs.write(unpackdt(caller['Date'],'%H%M'))
+            #    break
+    
+    #bbs.writeln(str(size))        
+    #bbs.writeln(str(mysticCallers[len(mysticCallers) - 1]))
+
+
+def update_json_callers():
+    """
+    Read the jsonCallers backwards for efficiency. Loop mysticCallers to
+    find a matching call. If no match due to json file not existing or empty
+    or 100 lines read backwards without match, will add all mystic calls to json.
+    If match found only add new records to jsonCallers.
+    """
+    global mysticCallers
+
+    jsonfile = scriptdir+"callers.json"
+
+    if not os.path.exists(jsonfile) or os.path.getsize(jsonfile) == 0:
+        # ADD ALL mysticCallers to jsonCallers
+        savelist2json( mysticCallers, jsonfile )
+
+    else:
+        foundMatch = False
+
+        # Calling the main processing function
+        with open(jsonfile) as file:
+            filepos = get_file_endpos(file)
+            
+            readlines = 0
+ 
+            #stop when reading 100 lines or start of file
+            while filepos >= 0 and readlines < 100:
+
+                line, filepos = read_previous_line(file, filepos)
+
+                if line is None or filepos < 0:
+                    break  # No more lines to read
+
+                #create list from file line string
+                jsonCaller = json.loads(line)
+
+                i = 0
+
+                for mysticCaller in reversed(mysticCallers):
+
+                    # MYSTICCALLER 100  JSONCALLER  100         MATCH
+                    # MYSTICCALLER 0    --                      NO MATCH
+                    # MYSTICCALLER 0    --                      NO MATCH
+                    # MYSTCICALLER 12   --                      NO MATCH
+
+                    #if i == 0:
+                        #bbs.menucmd('NW','/SCAN') #force recalculation of active users
+                        #activeusers = bbs.mci2str('NA')
+                        #bbs.gotoxy(1,1)
+                        #bbs.writeln(str(activeusers))
+                        #bbs.writeln(mysticCaller['Handle']+" "+str(mysticCaller['SecondsOn'])+" "+mysticCaller['Options'][2])
+                        #bbs.write('|PA')
+
+                    # date is accurate enought to make sure its unique with handle, could use callnum in the future, not required
+                    if mysticCaller['Date'] == jsonCaller['Date'] and mysticCaller['Handle'] == jsonCaller['Handle']:
+                        
+                        #bbs.gotoxy(1,1)
+                        #bbs.writeln('Found caller index ['+str(i)+'] at json line ['+str(readlines)+'] from EOF')
+                        #bbs.writeln(mysticCaller['Handle'])
+                        #bbs.write('|PA')
+
+                        #found caller from callers.dat in callers.json
+                        foundMatch = True
+                        break
+
+                    i += 1
+
+                if foundMatch:
+                    # loop through the last x records of mysticCallers to add them to the jsonCallers
+                    for mysticCaller in mysticCallers[len(mysticCallers) - i:]:
+                        
+                        # if seconds on larger than 0, user logged off!
+                        if int(mysticCaller['SecondsOn']) > 0:
+
+                            #if len(str(mysticCaller['Options'][2])) > 0 or int(mysticCaller['SecondsOn']) > 0:
+                            appendlist2json(mysticCaller, jsonfile)
+
+                        else:
+
+                            #check if online user count == 1 and current user handle other than mystic caller
+                            #this means the mystic caller has surely logged off!
+
+                            bbs.menucmd('NW','/SCAN') #force recalculation of active users
+                            activeusers = bbs.mci2str('NA')
+
+                            currentuser = bbs.getuser(0)['handle']
+                            if int(activeusers) == 1 and mysticCaller['Handle'] != currentuser:
+                                appendlist2json(mysticCaller, jsonfile)
+                            
+                            #skip rest of mystic callers if online user is found, this makes sure only logged off callers are added to json
+                            #bbs.write('test|PA')
+                            #bbs.gotoxy(1,1)
+                            #bbs.write(mysticCaller['Handle']+" "+str(mysticCaller['Options'][2]))
+                            #bbs.write('|PA')
+                            #break
+                    break
+
+                readlines += 1
+        
+        if not foundMatch:
+            # if still not found add all mysticCallers to jsonCallers
+            #bbs.write('append all callers to json')
+            for mysticCaller in mysticCallers:
+                appendlist2json(mysticCaller, jsonfile)
+
+
+def get_history():
+    global mysticHistory
+
+    f = open(datapath+"history.dat","rb")
+
+    # Using 'L' for unsigned LongInt fields
+    filestruct = '<L H H H H L L L H H H H H H H 24B 2B'
+    size = struct.calcsize(filestruct)
+
+    while not bbs.shutdown():
+        line = f.read(size)
+
+        if len(line) < size:
+            #bbs.write(str(line))
+            #bbs.write('|PN')
+            #data = struct.unpack('<L H',line[0:5])     
+            break
+        
+        data = struct.unpack(filestruct,line)     
+
+        # Directly use a dictionary to represent the record
+        history = {
+            "Doors":        0, #calculated cummulative
+            "Date":         data[0],
+            "Emails":       data[1],
+            "Posts":        data[2],
+            "DLs":          data[3],
+            "ULs":          data[4],
+            "DLk":          data[5],
+            "ULk":          data[6],
+            "Calls":        data[7],
+            "NewUsers":     data[8],
+            "Telnet":       data[9],
+            "FTP":          data[10],
+            "POP3":         data[11],
+            "SMTP":         data[12],
+            "NNTP":         data[13],
+            "HTTP":         data[14],
+            "Hourly":       list(data[15:39]),  # 24-byte array for hourly data
+            #"Reserved":     list(data[39:41]) # 2-byte array for reserved data
+        }
+
+        mysticHistory.append(history)
+
+        #if issysop():
+        #bbs.writeln(unpackdt(history['Date'],'%d%m%Y'))
+        
+    #bbs.writeln(str(mysticHistory[len(mysticHistory) - 1]))
+
+
+def get_previous_caller(file, orig_filepos):
+    """ 
+    Get the previous caller(s) from jsonCallers until a different handle is found
+    or the start of file is reached.
+    """
+
+    global Callers
+
+    filepos = orig_filepos
+    jsonCaller = None
+    #todays_calls = 0
+
+    while filepos >= 0:
+        line, tmp_filepos = read_previous_line(file, filepos)
+        if line is None:
+            break
+
+        caller = json.loads(line)
+
+        # Skip excluded handle
+        if caller['Handle'] == EXCLUDED_HANDLE:
+            filepos = tmp_filepos
+            continue
+
+        # First valid caller sets the base
+        if jsonCaller is None:
+            jsonCaller = caller
+            jsonCaller['TodaysCalls'] = 1
+
+            # Handle FilePos logic
+            if len(Callers) == 0 or unpackdt(Callers[-1]['Date'], '%d%m%Y') != unpackdt(jsonCaller['Date'], '%d%m%Y'):
+                jsonCaller['FilePos'] = orig_filepos
+            else:
+                jsonCaller['FilePos'] = Callers[-1]['FilePos']
+
+        # Check for repeated calls from same handle 
+
+        #NOTE: THIS SPLITS CALLS OF SAME USER ON DIFFERENT DAYS
+        elif caller['Handle'] == jsonCaller['Handle'] and unpackdt(caller['Date'], '%d%m%Y') == unpackdt(jsonCaller['Date'], '%d%m%Y'):
+        #NOTE: THIS AGGREGATES CALLS ON MULTIPLE DAYS
+        #elif caller['Handle'] == jsonCaller['Handle']:
+
+            jsonCaller['TodaysCalls'] += 1
+            jsonCaller['Date'] = caller['Date']  # Update to the most recent date
+            #jsonCaller['FilePos'] = orig_filepos  # Update to the most recent file position
+        else:
+            break
+
+        filepos = tmp_filepos
+
+    if jsonCaller:
+        Callers.append(jsonCaller)
+    else:
+        return -1  # No valid callers found
+
+    return filepos
+
+
+
+def show_callers():
+    global Callers
+    global historyDates
+    global historyDateFirst
+    global historyDateSecond
+
+    max_index = None
+    min_index = None
+
+    listsize = config.getint('general','listsize')
+    position = config.get('mci','position')
+    bbs.write(position)
+
+    xpos = bbs.wherex()
+    ypos = bbs.wherey()
+
+    jsonfile = scriptdir+"callers.json";
+    file = open(jsonfile)
+    filepos = get_file_endpos(file)
+    
+    MCIcaller = config.get('mci','caller')
+
+    # Calling the main processing function
+    
+    redraw = True
+
+    index = 0
+    history_filepos = 0
+    history_lastdate = None
+
+    for i in range(listsize):
+        filepos = get_previous_caller(file, filepos)
+        
+        if filepos > 0:
+            index += 1
+            min_index = index
+
+    #repeat until break or shutdown
+    while not bbs.shutdown():
+    
+        #foundcallers = 0
+        if not bbs.keypressed( ):
+            time.sleep(0.05) #avoid high cpu        
+
+        if bbs.keypressed():
+            key, extended = bbs.getkey()    
+
+            if key == KEY_ESCAPE or key == KEY_ENTER or key == 'q' or key == 'Q' or key == KEY_SPACE:
+                break
+
+            elif key == KEY_UP:
+
+                if filepos > 0 and index == len(Callers): # dont preload if index less than callers list length!
+                    filepos = get_previous_caller(file, filepos)
+                    if filepos == -1:
+                        max_index = index + 1
+                        #bbs.gotoxy(2,2)
+                        #bbs.writeln("SET MAX 1 "+str(max_index)+"  ")
+
+                index += 1
+
+                if max_index != None and index > max_index:
+                    index = max_index
+                else:
+                    redraw = True
+               
+                #bbs.gotoxy(1,1)
+                #bbs.writeln(str(index)+"  "+str(max_index)+"  ")
+
+            elif key == KEY_DOWN:
+                index -= 1
+                
+                if index < min_index:
+                    index = min_index
+                else:
+                    redraw = True
+
+        if redraw:
+                #bbs.gotoxy(1,1)
+                #bbs.write(str(len(Callers))+" "+str(index)+" "+str(filepos)+"     ")
+
+                # get dates for history
+
+                count = 0
+                found = 0
+                historysize = config.getint('general','historysize')
+                historyDates = []
+                
+                prevdate = None
+                #prevhandle = None
+
+                #slice callers for history
+                caller_iter = iter(Callers[index-listsize:])
+                caller_len = len(Callers[index-listsize:])
+
+                while True:
+                    try:
+                        
+                        #reslice when required to load extra callers in case history list not yet filled
+                        if filepos > 0 and count > caller_len - 1:
+                            #max_index = index + 1
+                            filepos = get_previous_caller(file, filepos)
+
+                            #re-slice callers for history
+                            caller_iter = iter(Callers[index-listsize+count:])
+                            caller_len = len(Callers[index-listsize+count:])
+
+                            #when end of json file is reached
+                            if filepos == -1:
+                                #set max index to the length of caller list
+                                max_index = len(Callers)
+                                #bbs.gotoxy(2,2)
+                                #bbs.writeln("SET MAX 2 "+str(max_index)+"  "+str(len(Callers))+"  ")
+                        
+                        Caller = next(caller_iter) 
+
+                        #do note that the FilePos of the last caller of date is used
+                        #see get_previous_caller function!
+                        #bbs.gotoxy(1,1+found)
+                        #bbs.write(unpackdt(Caller['Date'],'%d%m%Y'))  
+                        #calls += Caller['TodaysCalls']
+                        
+
+                        if prevdate != unpackdt(Caller['Date'],'%d%m%Y'): # and prevhandle != Caller['Handle']:
+
+                            tmp = {
+                                "Date": Caller['Date'],
+                                "FilePos": Caller['FilePos'],
+                            }
+
+                            historyDates.insert(0, tmp) 
+                            found += 1
+                            prevdate = unpackdt(Caller['Date'],'%d%m%Y')
+                            #prevhandle = Caller['Handle']
+                        
+                        count += 1
+
+                        #exit when list is full
+                        if found > historysize - 1:
+                            break
+
+                    except StopIteration:
+                            # StopIteration exception means the iterator is exhausted
+                            # This will occur when the historylist is larger than the actual history available
+                            break
+                
+                if history_lastdate <> historyDates[0]:
+                    show_history()
+                    history_lastdate = historyDates[0]
+
+                # show callers
+
+                count = 0
+                for Caller in reversed(Callers[:index]):
+
+                    todayscalls = ""
+                    if Caller['TodaysCalls'] > 1:
+                        todayscalls = config.get('mci','usercallstoday_start')
+                        todayscalls += str(Caller['TodaysCalls'])
+                        todayscalls += config.get('mci','usercallstoday_end')
+
+                    colors = mci_extract_colors( config.get('mci','handlecolors') )
+                    bbs.setpinfo(1,color(Caller['Handle'],colors))
+                    location_max_len = config.getint('general','location_max_length')
+                    bbs.setpinfo(2,color(Caller['City'][:location_max_len],colors))
+                    bbs.setpinfo(3,todayscalls)
+
+                    colors = mci_extract_colors( config.get('mci','nodecolors') )
+                    bbs.setpinfo(4,color(str(Caller['Node']),colors))
+
+                    format = config.get('general','format')
+                    colors = mci_extract_colors( config.get('mci','datecolors') )
+                    bbs.setpinfo(5,color(str(unpackdt(Caller['Date'],format)),colors))
+
+                    #try get json from optional
+                    try:
+                        optional = None
+                        if config.getint('general','optional_field') == 24:
+                            optional = json.loads(Caller['Options']['0'])
+                        if config.getint('general','optional_field') == 25:
+                            optional = json.loads(Caller['Options']['1'])
+                        if config.getint('general','optional_field') == 26:
+                            optional = json.loads(Caller['Options']['2'])
+                    # set empty parameters
+                    except:
+                        #NOTE: if json data no term take from user record options3
+                        user = bbs.getuserid(Caller['Index'])
+                        try:
+                            if config.getint('general','optional_field') == 24:
+                                optional = json.loads(str(user['opt1']))
+                            if config.getint('general','optional_field') == 25:
+                                optional = json.loads(str(user['opt2']))
+                            if config.getint('general','optional_field') == 26:
+                                optional = json.loads(str(user['opt3']))
+                        except:
+                            bbs.setpinfo(6,'')
+                            bbs.setpinfo(7,'')
+                            bbs.setpinfo(8,'')
+                        else:
+                            if isinstance(optional, dict):
+                                colors = mci_extract_colors( config.get('mci','handlecolors') )
+                                bbs.setpinfo(6,color(optional['Term'],colors))
+                                bbs.setpinfo(7,optional['Type'])
+                                colors = mci_extract_colors( config.get('mci','sizecolors') )
+                                bbs.setpinfo(8,color(optional['Size'].rjust(6," "),colors))
+                                
+                    # set option arguments
+                    else:
+                        if isinstance(optional, dict):
+                            colors = mci_extract_colors( config.get('mci','handlecolors') )
+
+                            bbs.setpinfo(6,color(optional['Term'],colors))
+                            bbs.setpinfo(7,optional['Type'])
+                            colors = mci_extract_colors( config.get('mci','sizecolors') )
+                            bbs.setpinfo(8,color(optional['Size'].rjust(6," "),colors))
+                        
+
+                    bbs.gotoxy(xpos, ypos + count)
+                    bbs.writeln(MCIcaller) 
+
+                    count += 1
+                    if count > listsize - 1:
+                        break
+            
+                redraw = False
+
+        #bbs.gotoxy(1,2)
+        #bbs.write(unpackdt(historyDateFirst,'%d%m%Y')+" "+unpackdt(historyDateSecond,'%d%m%Y'))
+
+def closest_datetime(target, dict_list):
+    """ 
+    Find the dictionary with the minimum time difference 
+    in 'Date' field from the target, but only if it's on the same day.
+    Assumes both 'Date' and target are timestamps, and converts to UTC.
+    """
+    # Convert target timestamp to a UTC datetime object and extract date
+    target_date = datetime.utcfromtimestamp(target).date()
+    #target_date = datetime.fromtimestamp(target).date()
+    
+    # Filter dict_list to include only entries with the same date as the target date
+    same_day_dicts = [
+        d for d in dict_list
+        if unpackdt(d['Date'],'%d%m%Y') == unpackdt(target,'%d%m%Y')
+        #if datetime.utcfromtimestamp(d['Date']).date() == target_date  # Convert each timestamp to UTC date for comparison
+    ]
+
+    #bbs.gotoxy(1,6)
+    #bbs.writeln(str(same_day_dicts))
+    # If no entries are on the same day, return None
+    if not same_day_dicts:
+        return None
+
+    # Find the dictionary with the closest timestamp on the same day
+    closest_dict = min(same_day_dicts, key=lambda x: abs(target - x['Date']))
+    return closest_dict
+    
+
+def get_cumulative_by_date(date, filepos, data='Doors'):
+    """ 
+    Loop to get previous call from jsonCallers until caller handle
+    different than previous caller handle or start of file is reached
+    """
+
+    #global jsonCallers
+    #jsonCaller = closest_datetime(date, jsonHistory)            
+            
+    jsonfile = scriptdir+"callers.json";
+    file = open(jsonfile)
+    #filepos = get_file_endpos(file)
+
+    jsonCaller = None
+    prevCaller = None
+    
+    line, filepos = read_previous_line(file, filepos)
+
+    if line is None:
+        # no callers
+        return -1
+        #break  # No more lines to read
+
+    #create list from file line string
+    jsonCaller = json.loads(line)
+
+    #if jsonCaller['Doors'] < 0:
+    #    jsonCaller['Doors'] = 0
+
+    #make sure to set cumulative immediately
+    if not data in jsonCaller:
+        jsonCaller[data] = 1
+
+    cumulative = jsonCaller[data]
+
+    count = 0    
+    while filepos >= 0: # and jsonCaller['Handle'] != prevCaller['Handle']:
+        
+        line, tmp_filepos = read_previous_line(file, filepos)
+
+        if line is None:
+            #bbs.gotoxy(1,3)
+            #bbs.writeln('None')
+            break
+
+        #create list from file line string
+        prevCaller = json.loads(line)
+
+        if prevCaller['Handle'] == EXCLUDED_HANDLE:
+            filepos = tmp_filepos
+            continue
+
+        #if count == 1:
+        #    bbs.gotoxy(1,2)
+        #    bbs.writeln(str(count)+" "+str(jsonCaller['CallNum'])+" "+unpackdt(jsonCaller['Date'],'%d%m%Y')+">"+str(prevCaller['CallNum'])+" "+unpackdt(prevCaller['Date'],'%d%m%Y'))        
+            
+        #NOTE: this aggregates calls of same user on multiple days
+        #if unpackdt(jsonCaller['Date'],'%d%m%Y') == unpackdt(prevCaller['Date'],'%d%m%Y') or jsonCaller['Handle'] == prevCaller['Handle']:
+
+        #NOTE: this splits 
+        if unpackdt(jsonCaller['Date'],'%d%m%Y') == unpackdt(prevCaller['Date'],'%d%m%Y'):
+            count += 1
+            #bbs.gotoxy(1,1)
+            #bbs.writeln(str(count)+" "+str(jsonCaller['CallNum'])+" "+unpackdt(jsonCaller['Date'],'%d%m%Y')+">"+str(prevCaller['CallNum'])+" "+unpackdt(prevCaller['Date'],'%d%m%Y'))
+            #bbs.writeln(jsonCaller['Handle']+" "+unpackdt(jsonCaller['Date'],'%d%m%Y'))
+            #in case of multiple repeated calls make sure to increase call number
+            
+            if not 'data' in prevCaller:
+                prevCaller[data] = 1
+
+            if prevCaller[data] > 0:
+                #jsonCaller[data] += prevCaller[data]
+                #cumulative += jsonCaller[data]
+                cumulative += prevCaller[data]
+                #cumulative += 20 #test
+
+            filepos = tmp_filepos #return prev caller when multiple calls made
+
+        else:
+            #bbs.gotoxy(1,2)
+            #bbs.writeln(str(count)+" "+str(jsonCaller['CallNum'])+" "+unpackdt(jsonCaller['Date'],'%d%m%Y')+">"+str(prevCaller['CallNum'])+" "+unpackdt(prevCaller['Date'],'%d%m%Y'))
+            break
+            #continue
+
+    #Callers.append(jsonCaller)
+
+    return cumulative
+
+
+def show_history():
+    global historyDates
+    global mysticHistory
+    #global jsonCallers
+    #bbs.gotoxy(1,1)
+    #bbs.write(str(historyDates))
+    #format = config.get('general','format')
+    #for Date in historyDates:
+    #    bbs.write(unpackdt(Date['Date'],format))
+
+    historypos = config.get('mci','historypos')
+    bbs.write(historypos)
+
+    xpos = bbs.wherex()
+    ypos = bbs.wherey()
+
+    count = 0
+    
+    format = config.get('general','format')
+
+    #bbs.gotoxy(60,1)
+    #bbs.write(str(len(historyDates)))
+
+    #only run for the prefilled history list size
+    for Date in historyDates:
+
+            History = closest_datetime(Date['Date'], mysticHistory)            
+
+            #bbs.gotoxy(40,1+test)
+            #bbs.write(str(Date['Date']))
+            #bbs.writeln(unpackdt(Date['Date'],format)) #+' '+unpackdt(History['Date'],format))
+
+            if History == None:
+                # if history record damaged or not available
+                History = {
+                    "Doors":        0, #calculated cummulative
+                    "Date":         Date['Date'],
+                    "Emails":       0,
+                    "Posts":        0,
+                    "DLs":          0,
+                    "ULs":          0,
+                    "DLk":          0,
+                    "ULk":          0,
+                    "Calls":        1,  #at least register call
+                    "NewUsers":     0,
+                    "Telnet":       0,
+                    "FTP":          0,
+                    "POP3":         0,
+                    "SMTP":         0,
+                    "NNTP":         0,
+                    "HTTP":         0,
+                    "Hourly":       0
+                    #"Reserved":     list(data[39:41]) # 2-byte array for reserved data
+                }
+                #continue
+
+            History['Doors'] = get_cumulative_by_date(Date['Date'], Date['FilePos'], 'Doors')
+            if History['Doors'] == -1:
+                History['Doors'] = config.get('mci','cummulative_unavailable')
+
+            colors = mci_extract_colors( config.get('mci','datecolors') )
+            bbs.setpinfo(1,color(unpackdt(History['Date'],format),colors))
+
+            #fix edge case where history.dat is incorrect, else 0 would be odd!
+            if History['Calls'] < 1:
+                History['Calls'] = 1
+
+            History['Calls'] = get_cumulative_by_date(Date['Date'], Date['FilePos'], 'TodaysCalls')
+
+            bbs.setpinfo(2,str(History['Calls']))                        
+            bbs.setpinfo(3,str(History['ULs']))
+            bbs.setpinfo(4,str(History['DLs']))
+
+            ULk = readable_size(History['ULk'])
+            DLk = readable_size(History['DLk'])
+
+            bbs.setpinfo(5,readable_size(History['ULk']))
+            bbs.setpinfo(6,readable_size(History['DLk']))
+
+            if History['Emails']+History['Posts'] > 0:
+                bbs.setpinfo(7,str(History['Emails']+History['Posts']))
+            else:
+                bbs.setpinfo(7,config.get('mci','cummulative_unavailable'))
+            
+            if History['Doors'] > 0:
+                bbs.setpinfo(8,str(History['Doors']))
+            else:
+                bbs.setpinfo(8,config.get('mci','cummulative_unavailable'))
+
+            if History['NewUsers'] > 0:
+                bbs.setpinfo(9,str(History['NewUsers']))
+            else:
+                bbs.setpinfo(9,config.get('mci','cummulative_unavailable'))
+        
+            #bbs.setpinfo(10,str(History['Telnet']))
+            #bbs.setpinfo(11,str(History['FTP']))
+            #bbs.setpinfo(12,str(History['POP3']))
+            #bbs.setpinfo(13,str(History['SMTP']))
+                                   
+            history = config.get('mci','history')
+            bbs.gotoxy(xpos,ypos+count)
+            bbs.write(history)
+
+
+            count += 1
+
+
+def update_current_caller():
+    global mysticCaller
+
+    # get terminal size
+    x, y = bbs.termsize()
+    size = str(x)+"x"+str(y)
+    
+
+    # thanks Xqtr! 
+    emulation = bbs.mci2str('SI')
+    terminal = bbs.mci2str('TE')
+    # size = bbs.mci2str('US')
+
+    #old method to load raw termtype, which is saved in connect.mps
+    #if os.path.isfile(bbs.getcfg()['temp']+'TERMTYPE'):
+    #    with open(bbs.getcfg()['temp']+'TERMTYPE', 'r') as f:
+    #        emulation = f.readline().strip()
+
+    data = {"Term": emulation, "Type": terminal, "Size": size}
+    optional = json.dumps(data)
+
+    #update mystic caller data (fallback in case of edge case)
+    for mysticCaller in reversed(mysticCallers):
+        # check handle only, should be enough
+        if mysticCaller['Handle'] == jsonCaller['Handle']:
+            if config.getint('general','optional_field') == 24:
+                mysticCaller['Options'][0] = optional
+            if config.getint('general','optional_field') == 25:
+                mysticCaller['Options'][1] = optional
+            if config.getint('general','optional_field') == 26:
+                mysticCaller['Options'][2] = optional
+            break
+
+
+    #remove prompt
+    prompt_448 = bbs.getprompt(448)
+    bbs.setprompt(448, '|IF|00')
+
+    #add json data to optional field
+    bbs.gotoxy(1,1)
+    bbs.stuffkey(optional+chr(13))
+    bbs.menucmd('GE',config.get('general','optional_field'))
+
+    #restore prompt
+    bbs.setprompt(448, str(prompt_448))
+
+
+def main():
+
+    load_config()
+    update_current_caller()
+    
+    bbs.write(config.get('mci','initial'))
+
+    ansifile = find_display_custom(scriptdir + config.get('ansi','ansifile'))
+    bbs.showfile(ansifile, 0, 0, 0, 0)
+    bbs.gotoxy(1,1)
+
+    bbs.write(config.get('mci','afterscreen'))
+
+    get_history()
+    get_last_callers()
+    update_json_callers()
+
+    mysticCallers[:] = [] #release memory
+
+    #set log and nodeinfo
+    bbs.sysoplog(1,'lastCallz - Viewing history')
+    bbs.menucmd('NA','lastCallz - Viewing history')
+
+    #speaks for itself :)
+    show_callers()
+
+    bbs.write(config.get('mci','reset'))
+
+    #reset node info
+    bbs.menucmd('NA','')
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,122 @@
+                                                              /\
+                                                          ___/  \___
+_______________________                                  //__ o0 ___\_________
+\_______         _____/_______________        _____________/__/\__\   /_______\
+  //   /    /   ___/__\______        /________\________    /____\    //    /jp
+ /    /    /   /            /  /    //  _________/   /    //    /   '     /
+/_________//__________/    /  /    /    //    /     /    /_____/_________/
+ dEMONIC pRODUCTIONZ /____/__//____    /     ______//___/ rELEASE iNFORMATION!
++-------------------------------- \_________/ --------------------------------+
+| +-----------------------<< release information >>-------------------------+ |
+| | release name: LastCallers v1.0 Full Release                             | |
+| | release date: January 12, 2026                                          | |
+| | coder/modder: opicron                                                   | |
+| | coded with: Python 2.7                                                  | |
+| | artist: opicron/anst                                                    | |
+. +-------------------------------------------------------------------------+ .
+
+ -+--------------------------<< release type >>-----------------------------+-
+  |                                                                         | .
+  |     [ ] original source code [ ] old source code [ ] source scraps      | .
+: |       [ ] coding/modding tips/tutorial [ ] misc util [x] bbs util       |
+  |  [ ] art collection [ ] bbs door [ ] bbs mod [ ] demo [ ] coding util   |
+  |                                                                         |
+ -+-------------------------------------------------------------------------+-
+
+ -+-------------------------<< source code in >>----------------------------+-
+  |                                                                         |
+  |   [ ] ppe [ ] pascal [ ] c [ ] ipl [ ] basic [ ] mpl [ ] isl [x] python |
+  |                                                                         |
+ -+-------------------------------------------------------------------------+-
+
+ -+------------------------<< software of bbs >>----------------------------+-
+  |                                                                         |
+  |  [ ] impulse [ ] system/x [ ] pcx [ ] iniquity [ ] pcboard [ ] obv/2    |
+  |  [ ] pipeline [ ] desire [ ] renegade [ ] itc [ ] illusion [x] mystic   |
+. |      [ ] not listed: _____________________________________________      |
+  |      [ ] universal door for: ___________________________ dropfiles      | :
+  |                                                                         |
+ -+-------------------------------------------------------------------------+-
+
+ -+----------------------------<< description >>----------------------------+-
+  | LastCallers is inspired by itself with Amiga Lastcallers and Xqtr fine  |
+  | mod for Mystic a46. Thanks to the coderz who continue to inspire me!    |
+  |                                                                         |
+  | Want to show all possible Mystic stats? Mails, Doors, Uploads,          |
+  | Downloads, Uploaded Bytes, Downloaded Bytes? You name it, we got it.    |
+  | Check it out!                                                           |
+  |                                                                         |
+  | Compatible with A46+, LastCallers will use extra information available  |
+  | in A49+ to show.                                                        |
+  |                                                                         |
+  | Caller data is saved or appended to an JSON file which enables          |
+  | unlimited history data instead of the 100 last callers from Mystic.     |
+  | The data is efficiently read so no matter how many years of data it     |
+  | will be silky smooth in loading and browsing.                           |
+  |                                                                         |
+  | Not using the script for a while? No worries, there is some smart       |
+  | logic which will make sure JSON data and new caller information will    |
+  | always match.                                                           |
+  |                                                                         |
+  | 100% configurable and widescreen support! Create your own look and      |
+  | feel. Unique styling of usernames, locations and filesizes possible.    |
+ -+-------------------------------------------------------------------------+-
+
+ -+----------------------------<< comments >>-------------------------------+-
+  | LastCallers is an enhanced last caller display mod for Mystic BBS       |
+  | inspired by Amiga Lastcallers. Shows all possible Mystic stats like     |
+  | mails, doors, uploads, downloads, uploaded/downloaded bytes. Compatible |
+  | with A46+, uses extra info available in A49+. Caller data is saved to   |
+  | JSON file enabling unlimited history data instead of just 100 callers.  |
+  | Features: wide screen compatible, scrollable lastcaller list, shows     |
+  | calls/ULs/DLs/sizes/doors/mails/terminal/resolution, 100% configurable  | 
+  | full color control, saves all callers for full history, optimized       |  
+ -+-------------------------------------------------------------------------+-
+
+:-+--------------------------<< instructions >>-----------------------------+-
+  | 1. Copy op-lastcall.mpy to /mystic/themes/default/scripts/ folder       | :
+  | 2. Copy folder /op-lastcall/ to /mystic/themes/default/scripts/         |
+  | 3. Override settings (see next block)                                   |
+  | 4. Add python script (GY) cmd to mystic menu with argument: op-lastcall |
+  | 5. Enjoy! ESC/ENTER/Q/SPACE to exit, Up/Down to scroll callers          |
+  |                                                                         |
+. | Requirements: Mystic 1.12 A46+ BBS, Python 2.7                          | .
+ -+-------------------------------------------------------------------------+-
+
+ -+-----------------------------<< settings >>------------------------------+-
+  | The configuration method is as following. The latest overridden values  |
+  | loaded in the last configuration will be used.                          |
+  |                                                                         |
+  |   default.ini > default.c132.ini > custom.ini > custom.c132.ini         |
+  |                                                                         |
+  | DO NOT EDIT THE DEFAULT.INI FILES, copy values to CUSTOM.INI if         |
+  | required. This will make upgrading a breeze!                            |
+  |                                                                         |
+  | The default.ini configuration files contains the main configuration, it |
+  | also contains the basic 80 columns screen size MCI strings.             |
+  |                                                                         |
+  | default.c132.ini configuration contains only the MCI strings for this   |
+  | screen size. This avoids having to add each config option to all        |
+  | configuration files.                                                    |
+  |                                                                         |
+  | Do not edit the default configuration files. You are able to override   |
+  | these by adding custom.ini for default size and server or by adding     |
+  | custom.c132.ini for customizing your configuration for other screen     |
+  | sizes.                                                                  |
+  |                                                                         |
+  | By keeping your overrides apart from the default configuration you are  |
+  | able to update easy without losing information when overwriting         |
+  | default config files.                                                   |
+ -+-------------------------------------------------------------------------+-
+
+: +-----------------------<< additional comments >>-------------------------+-
+  | greets:                                                                 | :
+. | The Godfather, Xqtr, Lukwe, Paulie420, g00r00, Jack Plash, dROC, Ktulu, |
+: | Mailman, GeC, Dynamike, Foxivision, Synopsis, Xtreeman, Hammer, aNST,   | .
+| | Steel, Tragos, and everybody else since 1992                            | :
+| +-------------------------------------------------------------------------+ |
+
++-----------------------------------------------------------------------------+
+|  template by jack phlash // 1998 - demonic productions (c) www.demonic.net  |
+:                                                                             :
+.                                                                             .
