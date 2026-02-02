@@ -13,6 +13,12 @@
 - optimized file reading to avoid slowdowns
 - save years of caller information for future reference
 
+## Important
+
+Terminal and Screen size only get populated when you enable Terminal Detection in Mystic.
+
+`Login/Matrix setting > Ask Emulation > Ask`
+
 # Screenshots
 
 80x25:<br>

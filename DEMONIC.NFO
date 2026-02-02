@@ -68,15 +68,10 @@ _______________________                                  //__ o0 ___\_________
   | feel. Unique styling of usernames, locations and filesizes possible.    |
  -+-------------------------------------------------------------------------+-
 
- -+----------------------------<< comments >>-------------------------------+-
-  | LastCallers is an enhanced last caller display mod for Mystic BBS       |
-  | inspired by Amiga Lastcallers. Shows all possible Mystic stats like     |
-  | mails, doors, uploads, downloads, uploaded/downloaded bytes. Compatible |
-  | with A46+, uses extra info available in A49+. Caller data is saved to   |
-  | JSON file enabling unlimited history data instead of just 100 callers.  |
-  | Features: wide screen compatible, scrollable lastcaller list, shows     |
-  | calls/ULs/DLs/sizes/doors/mails/terminal/resolution, 100% configurable  | 
-  | full color control, saves all callers for full history, optimized       |  
+:-+----------------------------<< IMPORTANT >>------------------------------+-
+  |                                                                         |
+  | You must enable Terminal Destection in Mystic Login Matrix settings!!   |
+  |                                                                         |
  -+-------------------------------------------------------------------------+-
 
 :-+--------------------------<< instructions >>-----------------------------+-
