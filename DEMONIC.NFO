@@ -8,8 +8,8 @@ _______________________                                  //__ o0 ___\_________
  dEMONIC pRODUCTIONZ /____/__//____    /     ______//___/ rELEASE iNFORMATION!
 +-------------------------------- \_________/ --------------------------------+
 | +-----------------------<< release information >>-------------------------+ |
-| | release name: LastCallers v1.0 Full Release                             | |
-| | release date: January 12, 2026                                          | |
+| | release name: LastCallers v1.1 Full Release                             | |
+| | release date: May 18, 2026                                              | |
 | | coder/modder: opicron                                                   | |
 | | coded with: Python 2.7                                                  | |
 | | artist: opicron/anst                                                    | |
@@ -66,11 +66,20 @@ _______________________                                  //__ o0 ___\_________
   |                                                                         |
   | 100% configurable and widescreen support! Create your own look and      |
   | feel. Unique styling of usernames, locations and filesizes possible.    |
+  |                                                                         |
+  | v1.1: terminal info (Term/Type/Size) is now stored per handle in        |
+  | userterms/<handle>.json. Mystic user opt fields are no longer used.     |
+  | Existing data is migrated automatically on first launch, and stale      |
+  | opt1/opt2/opt3 JSON is cleared as each user next logs in. Every new     |
+  | caller row written to callers.json now carries its own terminal info,   |
+  | so the viewer no longer needs a second lookup per row.                  |
  -+-------------------------------------------------------------------------+-
 
 :-+----------------------------<< IMPORTANT >>------------------------------+-
   |                                                                         |
-  | You must enable Terminal Destection in Mystic Login Matrix settings!!   |
+  | You must enable Terminal Detection in Mystic Login Matrix settings.     |
+  | No Mystic user optional field needs to be reserved any more -- the      |
+  | script stores its data outside the user record.                         |
   |                                                                         |
  -+-------------------------------------------------------------------------+-
 

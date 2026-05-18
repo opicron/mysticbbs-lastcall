@@ -19,6 +19,10 @@ Terminal and Screen size only get populated when you enable Terminal Detection i
 
 `Login/Matrix setting > Ask Emulation > Ask`
 
+Per-handle terminal info (Term/Type/Size) is stored in `userterms/<handle>.json`
+under the script directory. The folder is created automatically on first login;
+no Mystic user opt field is used.
+
 # Screenshots
 
 80x25:<br>

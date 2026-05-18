@@ -24,7 +24,7 @@ mysticHistory = []
 historyDates = []
 
 # Excluded handle
-EXCLUDED_HANDLE = "opiflex"
+EXCLUDED_HANDLE = "NONEONOENOEL"
 
 historyDateFirst = None
 historyDateSecond = None
@@ -181,6 +181,39 @@ def appendlist2json(entry, filename):
         return True
     except:
         return False
+
+def save_userterm(handle, data):
+    """ save per-handle terminal info (Term/Type/Size) to its own json file """
+    try:
+        termdir = scriptdir + "userterms" + os.sep
+        if not os.path.exists(termdir):
+            os.makedirs(termdir)
+        # sanitize handle for use as filename (handles may contain spaces, slashes, etc.)
+        safe = re.sub(r'[^A-Za-z0-9_-]', '_', handle)
+        with open(termdir + safe + ".json", 'w') as f:
+            json.dump(data, f)
+        return True
+    except:
+        return False
+
+def load_userterm(handle):
+    """ load per-handle terminal info, or None if not found """
+    try:
+        safe = re.sub(r'[^A-Za-z0-9_-]', '_', handle)
+        path = scriptdir + "userterms" + os.sep + safe + ".json"
+        if not os.path.exists(path):
+            return None
+        with open(path, 'r') as f:
+            return json.load(f)
+    except:
+        return None
+
+def attach_terminfo(mysticCaller):
+    """ embed per-handle TermInfo into a caller dict (no-op if not found) """
+    term = load_userterm(mysticCaller['Handle'])
+    if term:
+        mysticCaller['TermInfo'] = term
+    return mysticCaller
 #------------------------------------------------------------------------------
 
 
@@ -321,15 +354,64 @@ def load_config():
         pass
     else:        
         defaultcfg_wide = bbs.find_config(scriptdir+'default','ini')            
-        customcfg_wide = bbs.find_config(scriptdir+'custom','.ini')            
+        customcfg_wide = bbs.find_config(scriptdir+'custom','ini')
 
     #only load when different to original configuration
     if defaultcfg_wide != None and defaultcfg != defaultcfg_wide:
         config.read(defaultcfg_wide)
 
-    #only load when different to original configuration    
+    #only load when different to original configuration
     if customcfg_wide != None and customcfg != customcfg_wide:
         config.read(customcfg_wide)
+#------------------------------------------------------------------------------
+
+
+def migrate_userterms():
+    """
+    One-time migration: walk all Mystic users and write each one's stored
+    terminal info from their opt1/opt2/opt3 fields to userterms/<handle>.json.
+    Tries all three opt fields and uses the first one that parses as a dict
+    with a 'Term' key. Skipped automatically once the marker file exists.
+    """
+    termdir = scriptdir + "userterms" + os.sep
+    if not os.path.exists(termdir):
+        os.makedirs(termdir)
+
+    marker = termdir + ".migrated"
+    if os.path.exists(marker):
+        return 0
+
+    migrated = 0
+    count = 1  # 0 is the logged-in user
+    while not bbs.shutdown():
+        user = bbs.getuser(count)
+        if user is None:
+            break
+
+        handle = user['handle']
+        if handle:
+            for optkey in ('opt1', 'opt2', 'opt3'):
+                try:
+                    data = json.loads(str(user[optkey]))
+                except:
+                    continue
+                if (isinstance(data, dict)
+                        and isinstance(data.get('Term'), basestring)
+                        and isinstance(data.get('Type'), basestring)
+                        and isinstance(data.get('Size'), basestring)):
+                    save_userterm(handle, data)
+                    migrated += 1
+                    break
+
+        count += 1
+
+    try:
+        with open(marker, 'w') as f:
+            f.write(str(migrated))
+    except:
+        pass
+
+    return migrated
 #------------------------------------------------------------------------------
 
 
@@ -519,13 +601,15 @@ def update_json_callers():
 
     if not os.path.exists(jsonfile) or os.path.getsize(jsonfile) == 0:
         # ADD ALL mysticCallers to jsonCallers
+        for mc in mysticCallers:
+            attach_terminfo(mc)
         savelist2json( mysticCallers, jsonfile )
 
     else:
         foundMatch = False
 
         # Calling the main processing function
-        with open(jsonfile) as file:
+        with open(jsonfile, 'rb') as file:
             filepos = get_file_endpos(file)
             
             readlines = 0
@@ -579,8 +663,7 @@ def update_json_callers():
                         # if seconds on larger than 0, user logged off!
                         if int(mysticCaller['SecondsOn']) > 0:
 
-                            #if len(str(mysticCaller['Options'][2])) > 0 or int(mysticCaller['SecondsOn']) > 0:
-                            appendlist2json(mysticCaller, jsonfile)
+                            appendlist2json(attach_terminfo(mysticCaller), jsonfile)
 
                         else:
 
@@ -592,7 +675,7 @@ def update_json_callers():
 
                             currentuser = bbs.getuser(0)['handle']
                             if int(activeusers) == 1 and mysticCaller['Handle'] != currentuser:
-                                appendlist2json(mysticCaller, jsonfile)
+                                appendlist2json(attach_terminfo(mysticCaller), jsonfile)
                             
                             #skip rest of mystic callers if online user is found, this makes sure only logged off callers are added to json
                             #bbs.write('test|PA')
@@ -608,7 +691,7 @@ def update_json_callers():
             # if still not found add all mysticCallers to jsonCallers
             #bbs.write('append all callers to json')
             for mysticCaller in mysticCallers:
-                appendlist2json(mysticCaller, jsonfile)
+                appendlist2json(attach_terminfo(mysticCaller), jsonfile)
 
 
 def get_history():
@@ -727,7 +810,7 @@ def show_callers():
     global historyDateSecond
 
     max_index = None
-    min_index = None
+    min_index = 0
 
     listsize = config.getint('general','listsize')
     position = config.get('mci','position')
@@ -737,7 +820,7 @@ def show_callers():
     ypos = bbs.wherey()
 
     jsonfile = scriptdir+"callers.json";
-    file = open(jsonfile)
+    file = open(jsonfile, 'rb')
     filepos = get_file_endpos(file)
     
     MCIcaller = config.get('mci','caller')
@@ -759,7 +842,7 @@ def show_callers():
 
     #repeat until break or shutdown
     while not bbs.shutdown():
-    
+
         #foundcallers = 0
         if not bbs.keypressed( ):
             time.sleep(0.05) #avoid high cpu        
@@ -866,7 +949,7 @@ def show_callers():
                             # This will occur when the historylist is larger than the actual history available
                             break
                 
-                if history_lastdate <> historyDates[0]:
+                if historyDates and history_lastdate <> historyDates[0]:
                     show_history()
                     history_lastdate = historyDates[0]
 
@@ -894,48 +977,20 @@ def show_callers():
                     colors = mci_extract_colors( config.get('mci','datecolors') )
                     bbs.setpinfo(5,color(str(unpackdt(Caller['Date'],format)),colors))
 
-                    #try get json from optional
-                    try:
-                        optional = None
-                        if config.getint('general','optional_field') == 24:
-                            optional = json.loads(Caller['Options']['0'])
-                        if config.getint('general','optional_field') == 25:
-                            optional = json.loads(Caller['Options']['1'])
-                        if config.getint('general','optional_field') == 26:
-                            optional = json.loads(Caller['Options']['2'])
-                    # set empty parameters
-                    except:
-                        #NOTE: if json data no term take from user record options3
-                        user = bbs.getuserid(Caller['Index'])
-                        try:
-                            if config.getint('general','optional_field') == 24:
-                                optional = json.loads(str(user['opt1']))
-                            if config.getint('general','optional_field') == 25:
-                                optional = json.loads(str(user['opt2']))
-                            if config.getint('general','optional_field') == 26:
-                                optional = json.loads(str(user['opt3']))
-                        except:
-                            bbs.setpinfo(6,'')
-                            bbs.setpinfo(7,'')
-                            bbs.setpinfo(8,'')
-                        else:
-                            if isinstance(optional, dict):
-                                colors = mci_extract_colors( config.get('mci','handlecolors') )
-                                bbs.setpinfo(6,color(optional['Term'],colors))
-                                bbs.setpinfo(7,optional['Type'])
-                                colors = mci_extract_colors( config.get('mci','sizecolors') )
-                                bbs.setpinfo(8,color(optional['Size'].rjust(6," "),colors))
-                                
-                    # set option arguments
-                    else:
-                        if isinstance(optional, dict):
-                            colors = mci_extract_colors( config.get('mci','handlecolors') )
+                    #prefer terminal info embedded in the caller record; fall back to per-handle json
+                    optional = Caller.get('TermInfo') or load_userterm(Caller['Handle'])
 
-                            bbs.setpinfo(6,color(optional['Term'],colors))
-                            bbs.setpinfo(7,optional['Type'])
-                            colors = mci_extract_colors( config.get('mci','sizecolors') )
-                            bbs.setpinfo(8,color(optional['Size'].rjust(6," "),colors))
-                        
+                    if isinstance(optional, dict):
+                        colors = mci_extract_colors( config.get('mci','handlecolors') )
+                        bbs.setpinfo(6,color(optional['Term'],colors))
+                        bbs.setpinfo(7,optional['Type'])
+                        colors = mci_extract_colors( config.get('mci','sizecolors') )
+                        bbs.setpinfo(8,color(optional['Size'].rjust(6," "),colors))
+                    else:
+                        bbs.setpinfo(6,'')
+                        bbs.setpinfo(7,'')
+                        bbs.setpinfo(8,'')
+
 
                     bbs.gotoxy(xpos, ypos + count)
                     bbs.writeln(MCIcaller) 
@@ -948,6 +1003,8 @@ def show_callers():
 
         #bbs.gotoxy(1,2)
         #bbs.write(unpackdt(historyDateFirst,'%d%m%Y')+" "+unpackdt(historyDateSecond,'%d%m%Y'))
+
+    file.close()
 
 def closest_datetime(target, dict_list):
     """ 
@@ -987,81 +1044,56 @@ def get_cumulative_by_date(date, filepos, data='Doors'):
     #jsonCaller = closest_datetime(date, jsonHistory)            
             
     jsonfile = scriptdir+"callers.json";
-    file = open(jsonfile)
-    #filepos = get_file_endpos(file)
 
     jsonCaller = None
     prevCaller = None
-    
-    line, filepos = read_previous_line(file, filepos)
 
-    if line is None:
-        # no callers
-        return -1
-        #break  # No more lines to read
-
-    #create list from file line string
-    jsonCaller = json.loads(line)
-
-    #if jsonCaller['Doors'] < 0:
-    #    jsonCaller['Doors'] = 0
-
-    #make sure to set cumulative immediately
-    if not data in jsonCaller:
-        jsonCaller[data] = 1
-
-    cumulative = jsonCaller[data]
-
-    count = 0    
-    while filepos >= 0: # and jsonCaller['Handle'] != prevCaller['Handle']:
-        
-        line, tmp_filepos = read_previous_line(file, filepos)
+    with open(jsonfile, 'rb') as file:
+        line, filepos = read_previous_line(file, filepos)
 
         if line is None:
-            #bbs.gotoxy(1,3)
-            #bbs.writeln('None')
-            break
+            # no callers
+            return -1
 
         #create list from file line string
-        prevCaller = json.loads(line)
+        jsonCaller = json.loads(line)
 
-        if prevCaller['Handle'] == EXCLUDED_HANDLE:
-            filepos = tmp_filepos
-            continue
+        #make sure to set cumulative immediately
+        if not data in jsonCaller:
+            jsonCaller[data] = 1
 
-        #if count == 1:
-        #    bbs.gotoxy(1,2)
-        #    bbs.writeln(str(count)+" "+str(jsonCaller['CallNum'])+" "+unpackdt(jsonCaller['Date'],'%d%m%Y')+">"+str(prevCaller['CallNum'])+" "+unpackdt(prevCaller['Date'],'%d%m%Y'))        
-            
-        #NOTE: this aggregates calls of same user on multiple days
-        #if unpackdt(jsonCaller['Date'],'%d%m%Y') == unpackdt(prevCaller['Date'],'%d%m%Y') or jsonCaller['Handle'] == prevCaller['Handle']:
+        cumulative = jsonCaller[data]
 
-        #NOTE: this splits 
-        if unpackdt(jsonCaller['Date'],'%d%m%Y') == unpackdt(prevCaller['Date'],'%d%m%Y'):
-            count += 1
-            #bbs.gotoxy(1,1)
-            #bbs.writeln(str(count)+" "+str(jsonCaller['CallNum'])+" "+unpackdt(jsonCaller['Date'],'%d%m%Y')+">"+str(prevCaller['CallNum'])+" "+unpackdt(prevCaller['Date'],'%d%m%Y'))
-            #bbs.writeln(jsonCaller['Handle']+" "+unpackdt(jsonCaller['Date'],'%d%m%Y'))
-            #in case of multiple repeated calls make sure to increase call number
-            
-            if not 'data' in prevCaller:
-                prevCaller[data] = 1
+        count = 0
+        while filepos >= 0:
 
-            if prevCaller[data] > 0:
-                #jsonCaller[data] += prevCaller[data]
-                #cumulative += jsonCaller[data]
-                cumulative += prevCaller[data]
-                #cumulative += 20 #test
+            line, tmp_filepos = read_previous_line(file, filepos)
 
-            filepos = tmp_filepos #return prev caller when multiple calls made
+            if line is None:
+                break
 
-        else:
-            #bbs.gotoxy(1,2)
-            #bbs.writeln(str(count)+" "+str(jsonCaller['CallNum'])+" "+unpackdt(jsonCaller['Date'],'%d%m%Y')+">"+str(prevCaller['CallNum'])+" "+unpackdt(prevCaller['Date'],'%d%m%Y'))
-            break
-            #continue
+            #create list from file line string
+            prevCaller = json.loads(line)
 
-    #Callers.append(jsonCaller)
+            if prevCaller['Handle'] == EXCLUDED_HANDLE:
+                filepos = tmp_filepos
+                continue
+
+            #NOTE: this splits calls of same user on multiple days
+            if unpackdt(jsonCaller['Date'],'%d%m%Y') == unpackdt(prevCaller['Date'],'%d%m%Y'):
+                count += 1
+                #in case of multiple repeated calls make sure to increase call number
+
+                if data not in prevCaller:
+                    prevCaller[data] = 1
+
+                if prevCaller[data] > 0:
+                    cumulative += prevCaller[data]
+
+                filepos = tmp_filepos #return prev caller when multiple calls made
+
+            else:
+                break
 
     return cumulative
 
@@ -1129,13 +1161,13 @@ def show_history():
             colors = mci_extract_colors( config.get('mci','datecolors') )
             bbs.setpinfo(1,color(unpackdt(History['Date'],format),colors))
 
-            #fix edge case where history.dat is incorrect, else 0 would be odd!
+            History['Calls'] = get_cumulative_by_date(Date['Date'], Date['FilePos'], 'TodaysCalls')
+
+            #fix edge case where cumulative is unavailable or history.dat is incorrect, else 0/-1 would be odd!
             if History['Calls'] < 1:
                 History['Calls'] = 1
 
-            History['Calls'] = get_cumulative_by_date(Date['Date'], Date['FilePos'], 'TodaysCalls')
-
-            bbs.setpinfo(2,str(History['Calls']))                        
+            bbs.setpinfo(2,str(History['Calls']))
             bbs.setpinfo(3,str(History['ULs']))
             bbs.setpinfo(4,str(History['DLs']))
 
@@ -1174,57 +1206,55 @@ def show_history():
 
 
 def update_current_caller():
-    global mysticCaller
-
     # get terminal size
     x, y = bbs.termsize()
     size = str(x)+"x"+str(y)
-    
 
-    # thanks Xqtr! 
+    # thanks Xqtr!
     emulation = bbs.mci2str('SI')
     terminal = bbs.mci2str('TE')
-    # size = bbs.mci2str('US')
-
-    #old method to load raw termtype, which is saved in connect.mps
-    #if os.path.isfile(bbs.getcfg()['temp']+'TERMTYPE'):
-    #    with open(bbs.getcfg()['temp']+'TERMTYPE', 'r') as f:
-    #        emulation = f.readline().strip()
 
     data = {"Term": emulation, "Type": terminal, "Size": size}
-    optional = json.dumps(data)
 
-    #update mystic caller data (fallback in case of edge case)
-    for mysticCaller in reversed(mysticCallers):
-        # check handle only, should be enough
-        if mysticCaller['Handle'] == jsonCaller['Handle']:
-            if config.getint('general','optional_field') == 24:
-                mysticCaller['Options'][0] = optional
-            if config.getint('general','optional_field') == 25:
-                mysticCaller['Options'][1] = optional
-            if config.getint('general','optional_field') == 26:
-                mysticCaller['Options'][2] = optional
-            break
+    current = bbs.getuser(0)
 
+    #persist per-handle terminal info to its own json file
+    save_userterm(current['handle'], data)
 
-    #remove prompt
-    prompt_448 = bbs.getprompt(448)
-    bbs.setprompt(448, '|IF|00')
+    #clean any leftover terminal-info JSON from the user's opt1/opt2/opt3 fields
+    #(only possible for the current user; uses the GE menucmd stuffkey pattern)
+    to_clear = []
+    for optkey, optfield in (('opt1', 24), ('opt2', 25), ('opt3', 26)):
+        try:
+            parsed = json.loads(str(current[optkey]))
+        except:
+            continue
+        if (isinstance(parsed, dict)
+                and isinstance(parsed.get('Term'), basestring)
+                and isinstance(parsed.get('Type'), basestring)
+                and isinstance(parsed.get('Size'), basestring)):
+            to_clear.append(optfield)
 
-    #add json data to optional field
-    bbs.gotoxy(1,1)
-    bbs.stuffkey(optional+chr(13))
-    bbs.menucmd('GE',config.get('general','optional_field'))
-
-    #restore prompt
-    bbs.setprompt(448, str(prompt_448))
+    if to_clear:
+        prompt_448 = bbs.getprompt(448)
+        bbs.setprompt(448, '|IF|00')
+        bbs.gotoxy(1,1)
+        # 60 backspaces wipe any pre-filled content (opt field max length),
+        # then Enter commits the now-empty value
+        clear_seq = chr(8) * 60 + chr(13)
+        for optfield in to_clear:
+            bbs.stuffkey(clear_seq)
+            bbs.menucmd('GE', str(optfield))
+        bbs.setprompt(448, str(prompt_448))
 
 
 def main():
 
     load_config()
-    update_current_caller()
-    
+
+    # one-time migration of opt1/2/3 → userterms/<handle>.json (skipped after first run)
+    migrate_userterms()
+
     bbs.write(config.get('mci','initial'))
 
     ansifile = find_display_custom(scriptdir + config.get('ansi','ansifile'))
@@ -1235,6 +1265,7 @@ def main():
 
     get_history()
     get_last_callers()
+    update_current_caller()
     update_json_callers()
 
     mysticCallers[:] = [] #release memory
